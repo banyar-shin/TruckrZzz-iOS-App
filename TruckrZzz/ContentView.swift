@@ -139,7 +139,7 @@ extension Color {
 }
 
 struct ContentView: View {
-    @State private var heartRate = 0.0
+    @State public var heartRate = 0.0
     @State private var heartRateHistory: [Double] = []
     
     let terraRT = TerraRT(devId: DEVID, referenceId: "user2") { succ in
@@ -160,24 +160,30 @@ struct ContentView: View {
     }
     
     @State private var visible = false
+    @State private var showPulsating = false
     @State private var showingWidget = false
     @State private var bleSwitch = false
     
     var body: some View {
         NavigationView{
-            VStack{
-            	connectionStatus().opacity(visible ? 1 : 0)
+            VStack {
+                connectionStatus().opacity(visible ? 1 : 0)
                 Spacer()
-                Text("\(Int(heartRate)) BPM")
-                    .font(.system(size: 48))
-                    .foregroundColor(heartRate >= 60 || heartRate == 0 ? .primary : .red)
-                    .padding()
+                ZStack {
+                    if showPulsating {
+                        PulsateView(delay: 0)
+                    }
+                    Text("\(Int(heartRate)) BPM")
+                        .font(.system(size: 48))
+                        .foregroundColor(heartRate > 60 || heartRate == 0 ? .primary : .red)
+                        .padding()
+                }
                 Spacer()
                 realTimeStreaming().padding([.leading, .trailing, .top, .bottom])
                     .overlay(
                         RoundedRectangle(cornerRadius: Globals.shared.cornerradius)
-                            .stroke(Color.border, lineWidth: 1)
-                            .padding([.leading, .trailing], 5)
+                            .stroke(.primary, lineWidth: 1)
+                            .padding([.leading, .trailing], 10)
                         )
                 connectionButtons().padding([.leading, .trailing, .top, .bottom])
                     .padding([.leading, .trailing, .bottom])
@@ -186,7 +192,8 @@ struct ContentView: View {
             .navigationBarTitle("", displayMode: .inline)
                 .toolbar {
                     ToolbarItem(placement: .principal) {
-                        Text("TruckrZzz").fontWeight(.bold)
+                        Text("TruckrZzz")
+                            .fontWeight(.bold)
                             .font(.system(size: 32))
                             .foregroundColor(.primary)
                             .padding(.top, 30)
@@ -228,7 +235,7 @@ struct ContentView: View {
                     .font(.system(size: 16))
                     .foregroundColor(.primary)
                     .padding([.top, .bottom], Globals.shared.smallpadding)
-                    .padding([.trailing])
+                    .padding(.leading)
             }).onChange(of: bleSwitch){bleSwitch in
                 let userId = terraRT.getUserid()
                 print("UserId detected: \(userId ?? "None")")
@@ -242,8 +249,9 @@ struct ContentView: View {
                             sendPayload(update, device!.id)
                             print(update)
                             
-                            if let heartRateValue = update.val {
-                            	heartRate = heartRateValue
+                            if heartRate != update.val {
+                                heartRate = update.val!
+                                showPulsating.toggle()
                             }
                         }
                     )
@@ -253,6 +261,8 @@ struct ContentView: View {
                     terraRT.stopRealtime(type: .BLE)
                 }
             }
+            .disabled(visible ? false : true)
+            .padding(.trailing)
         }
     }
     
