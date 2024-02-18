@@ -85,7 +85,7 @@ public func generateSDKToken(devId: String, xAPIKey: String) -> TokenPayload?{
 }
 
 public func sendPayload(_ payload: Update){
-    let url = URL(string: "https://xxxxxxxxxx") // change to ur endpoint
+    let url = URL(string: ENDPOINT)
     
     guard let requestUrl = url else {fatalError()}
     var request = URLRequest(url: requestUrl)
@@ -197,6 +197,10 @@ struct ContentView: View {
                         callback: { update in
                             sendPayload(update)
                             print(update)
+                            
+                            if let heartRateValue = update.val {
+                            	heartRate = heartRateValue
+                            }
                         }
                     )
                     
