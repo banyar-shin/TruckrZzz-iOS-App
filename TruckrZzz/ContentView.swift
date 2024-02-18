@@ -162,6 +162,7 @@ struct ContentView: View {
     @State private var visible = false
     @State private var showPulsating = false
     @State private var showingWidget = false
+    @State private var isModalPresented = false
     @State private var bleSwitch = false
     
     var body: some View {
@@ -206,12 +207,7 @@ struct ContentView: View {
     private func connectionStatus() -> some View{
         HStack{
             Button(action: {
-                let device = terraRT.getConnectedDevice()
-                if device != nil {
-                    print("getConnectedDevice: \(device!.id), \(device!.deviceName)")
-                } else {
-                print("getConnectedDevice: none found")
-                }
+                isModalPresented.toggle()
             }, label: {
                 Text("Connected")
                     .fontWeight(.bold)
@@ -225,6 +221,11 @@ struct ContentView: View {
                             .foregroundColor(.green)
                     )
             })
+            .sheet(isPresented: $isModalPresented) {
+                let device = terraRT.getConnectedDevice()
+//                    print("getConnectedDevice: \(device!.id), \(device!.deviceName)")
+                ModalView(dataToShow: "Device ID:\n\(device!.id)\n\nDevice Name:\n\(device!.deviceName)\n")
+            }
         }
     }
     
