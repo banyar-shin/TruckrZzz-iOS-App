@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Charts
 import CoreBluetooth
 import TerraRTiOS
 
@@ -84,7 +85,13 @@ public func generateSDKToken(devId: String, xAPIKey: String) -> TokenPayload?{
         return result
 }
 
-public func sendPayload(_ payload: Update){
+public func sendPayload(_ payload: Update, _ deviceID: String){
+    let payloadDictionary: [String: Any] = [
+        "timestamp": payload.ts!,
+        "val": payload.val!,
+        "device_id": deviceID
+    ]
+    
     let url = URL(string: ENDPOINT)
     
     guard let requestUrl = url else {fatalError()}
@@ -94,9 +101,10 @@ public func sendPayload(_ payload: Update){
     request.setValue("keep-alive", forHTTPHeaderField: "Connection")
     
     do {
-        request.httpBody = try JSONEncoder().encode(payload)
+        // Encoding the payload dictionary as JSON and setting it as the HTTP body
+        request.httpBody = try JSONSerialization.data(withJSONObject: payloadDictionary)
     } catch {
-        print(error)
+    print(error)
     }
     let task = URLSession.shared.dataTask(with: request){
         (data, response, error) in
@@ -132,6 +140,7 @@ extension Color {
 
 struct ContentView: View {
     @State private var heartRate = 0.0
+    @State private var heartRateHistory: [Double] = []
     
     let terraRT = TerraRT(devId: DEVID, referenceId: "user2") { succ in
         print("TerraRT init: \(succ)")
@@ -150,52 +159,87 @@ struct ContentView: View {
         UINavigationBar.appearance().largeTitleTextAttributes = [.font: UIFont.systemFont(ofSize: 24)]
     }
     
+    @State private var visible = false
     @State private var showingWidget = false
     @State private var bleSwitch = false
-    @State private var sensorSwitch = false
-
+    
     var body: some View {
         NavigationView{
             VStack{
+            	connectionStatus().opacity(visible ? 1 : 0)
+                Spacer()
+                Text("\(Int(heartRate)) BPM")
+                    .font(.system(size: 48))
+                    .foregroundColor(heartRate >= 60 || heartRate == 0 ? .primary : .red)
+                    .padding()
+                Spacer()
                 realTimeStreaming().padding([.leading, .trailing, .top, .bottom])
                     .overlay(
                         RoundedRectangle(cornerRadius: Globals.shared.cornerradius)
                             .stroke(Color.border, lineWidth: 1)
                             .padding([.leading, .trailing], 5)
                         )
-                buttons().padding([.leading, .trailing, .top, .bottom])
-                	.overlay(
-                        RoundedRectangle(cornerRadius: Globals.shared.cornerradius)
-                            .stroke(Color.border, lineWidth: 1)
-                            .padding([.leading, .trailing], 5)
-                        )
-                Text("\(heartRate) bpm") // Display static text
-                    .font(.title)
-                    .padding()
-                Spacer()
+                connectionButtons().padding([.leading, .trailing, .top, .bottom])
+                    .padding([.leading, .trailing, .bottom])
+                    .border(Color.clear, width: 1)
             }
-            .navigationTitle(Text("Terra RealTime iOS")).padding(.top, 40)
+            .navigationBarTitle("", displayMode: .inline)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Text("TruckrZzz").fontWeight(.bold)
+                            .font(.system(size: 32))
+                            .foregroundColor(.primary)
+                            .padding(.top, 30)
+                    }
+                }
+                .padding(.top, 20)
+        }
+    }
+    
+    private func connectionStatus() -> some View{
+        HStack{
+            Button(action: {
+                let device = terraRT.getConnectedDevice()
+                if device != nil {
+                    print("getConnectedDevice: \(device!.id), \(device!.deviceName)")
+                } else {
+                print("getConnectedDevice: none found")
+                }
+            }, label: {
+                Text("Connected")
+                    .fontWeight(.bold)
+                    .font(.system(size: 12))
+                    .foregroundColor(.inverse)
+                    .padding(3)
+                    .padding(.leading,3)
+                    .padding(.trailing,3)
+                    .background(
+                        Capsule()
+                            .foregroundColor(.green)
+                    )
+            })
         }
     }
     
     private func realTimeStreaming() -> some View{
         HStack{
             Toggle(isOn: $bleSwitch, label: {
-                Text("Real Time").fontWeight(.bold)
-                    .font(.system(size: 14))
-                    .foregroundColor(.inverse)
+                Text("Toggle Streaming").fontWeight(.bold)
+                    .font(.system(size: 16))
+                    .foregroundColor(.primary)
                     .padding([.top, .bottom], Globals.shared.smallpadding)
                     .padding([.trailing])
             }).onChange(of: bleSwitch){bleSwitch in
                 let userId = terraRT.getUserid()
                 print("UserId detected: \(userId ?? "None")")
                 if (bleSwitch){
+                    let device = terraRT.getConnectedDevice()
                     print("startRealtime - BLE")
                     terraRT.startRealtime(
                         type: .BLE,
                         dataType: [.HEART_RATE],
                         callback: { update in
-                            sendPayload(update)
+                            sendPayload(update, device!.id)
                             print(update)
                             
                             if let heartRateValue = update.val {
@@ -212,56 +256,45 @@ struct ContentView: View {
         }
     }
     
-    private func buttons() -> some View {
-        VStack{
+    private func connectionButtons() -> some View {
+        HStack{
             Button(action: {
-            	print("BLE selected!")
+                print("BLE selected!")
                 showingWidget.toggle()
             }, label: {
                     Text("Connect Device")
                     .fontWeight(.bold)
-                    .font(.system(size: 14))
+                    .font(.system(size: 16))
                     .foregroundColor(.inverse)
-                    .padding([.top, .bottom], Globals.shared.smallpadding)
-                    .padding([.leading, .trailing])
+                    .padding()
+                    .frame(maxWidth: .infinity)
                     .background(
                         Capsule()
                             .foregroundColor(.button)
                     )
             })
             .sheet(isPresented: $showingWidget){ terraRT.startBluetoothScan(type: .BLE, callback: {success in
-                showingWidget.toggle()
                 print("Device Connection Callback: \(success)")
-            })}
-            Button(action: {
-            	let device = terraRT.getConnectedDevice()
-                if device != nil {
-                    print("getConnectedDevice: \(device!.id), \(device!.deviceName)")
-                } else {
-                print("getConnectedDevice: none found")
+                if showingWidget {
+                    showingWidget.toggle()
                 }
-            }, label: {
-                Text("Check Connection")
-                    .fontWeight(.bold)
-                    .font(.system(size: 14))
-                    .foregroundColor(.inverse)
-                    .padding([.top, .bottom], Globals.shared.smallpadding)
-                    .padding([.leading, .trailing])
-                    .background(
-                        Capsule()
-                            .foregroundColor(.button)
-                    )
-            })
+                if success {
+                    visible.toggle()
+                }
+            })}
             Button(action: {
                 print("Disconnecting device!")
                 terraRT.disconnect(type: .BLE)
+                if visible {
+                    visible.toggle()
+                }
             }, label: {
-                Text("Disconnect")
+                Text("Disconnect Device")
                     .fontWeight(.bold)
-                    .font(.system(size: 14))
+                    .font(.system(size: 16))
                     .foregroundColor(.inverse)
-                    .padding([.top, .bottom], Globals.shared.smallpadding)
-                    .padding([.leading, .trailing])
+                    .padding()
+                    .frame(maxWidth: .infinity)
                     .background(
                         Capsule()
                             .foregroundColor(.button)
